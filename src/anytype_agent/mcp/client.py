@@ -31,10 +31,17 @@ class AnyTypeClient:
         )
     
     def _get_headers(self) -> Dict[str, str]:
-        """Get headers for API requests."""
+        """Get headers for API requests.
+        
+        AnyType requires:
+        - Anytype-Version header (current: 2025-11-08)
+        - Authorization: Bearer <api_key> (from Desktop Client Settings)
+        - X-Space-ID: <space_id> (optional, for multi-space setups)
+        """
         headers = {
             "Content-Type": "application/json",
             "Accept": "application/json",
+            "Anytype-Version": "2025-11-08",
         }
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
@@ -111,7 +118,28 @@ class AnyTypeClient:
         response = await self.client.get("/api/templates")
         response.raise_for_status()
         return response.json()
-    
+
+    async def test_connection(self) -> Dict[str, Any]:
+        """Test the connection to AnyType API and return account info."""
+        try:
+            response = await self.client.get("/api/account")
+            response.raise_for_status()
+            return {"status": "success", "data": response.json()}
+        except httpx.HTTPStatusError as e:
+            logger.error(f"Connection test failed: {e.response.status_code} - {e.response.text}")
+            return {
+                "status": "error",
+                "error": f"HTTP {e.response.status_code}",
+                "message": e.response.text[:200],
+            }
+        except httpx.ConnectError as e:
+            logger.error(f"Connection failed: {e}")
+            return {
+                "status": "error",
+                "error": "connection_failed",
+                "message": f"Could not connect to {self.base_url}. Is the AnyType service running?",
+            }
+
     async def close(self):
         """Close the client connection."""
         await self.client.aclose()
